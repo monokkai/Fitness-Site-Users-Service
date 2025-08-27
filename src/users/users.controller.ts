@@ -7,13 +7,15 @@ import {
     UseGuards,
     Get,
     HttpCode,
-    HttpStatus
+    HttpStatus,
+    BadRequestException
 } from '@nestjs/common';
 import { UsersService, UserProfile, UserResponse } from './users.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { UpdateAvatarDto } from './dto/update-avatar.dto';
 import { Request } from 'express';
+import { DeleteAccountDto } from './dto/delete-account.dto';
 
 interface AuthenticatedRequest extends Request {
     user?: { id: number };
@@ -40,7 +42,14 @@ export class UsersController {
         if (!req.user?.id) {
             throw new Error('User not found in request');
         }
-        return this.usersService.updateProfile(req.user.id, updateData);
+
+        if (updateData.password && updateData.password !== updateData.confirmPassword) {
+            throw new BadRequestException('Passwords do not match');
+        }
+
+        const { confirmPassword, ...dataWithoutConfirm } = updateData;
+
+        return this.usersService.updateProfile(req.user.id, dataWithoutConfirm);
     }
 
     @Put('avatar')
@@ -56,10 +65,17 @@ export class UsersController {
 
     @Delete('account')
     @HttpCode(HttpStatus.NO_CONTENT)
-    async deleteAccount(@Req() req: AuthenticatedRequest): Promise<{ message: string }> {
+    async deleteAccount(@Req() req: AuthenticatedRequest, @Body() deleteData: DeleteAccountDto): Promise<void> {
         if (!req.user?.id) {
             throw new Error('User not found in request');
         }
-        return this.usersService.deleteAccount(req.user.id);
+        const user = await this.usersService.getUserById(req.user.id);
+        const isPasswordValid = await bcrypt.compare(deleteData.password, user.password);
+
+        if (!isPasswordValid) {
+            throw new BadRequestException('Invalid password');
+        }
+
+        await this.usersService.deleteAccount(req.user.id);
     }
 }

@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, ConflictException } from '@nestjs/common
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from '../database/entities/user.entity';
+import * as bcrypt from 'bcrypt';
 
 export interface UserProfile {
     id: number;
@@ -14,6 +15,7 @@ export interface UserProfile {
 export interface UpdateProfileData {
     username?: string;
     email?: string;
+    password?: string;
 }
 
 export interface UserResponse {
@@ -75,6 +77,11 @@ export class UsersService {
             user.email = updateData.email;
         }
 
+        if (updateData.password) {
+            const saltRounds = 10;
+            user.password = await bcrypt.hash(updateData.password, saltRounds);
+        }
+
         user.updatedAt = new Date();
         await this.usersRepository.save(user);
 
@@ -107,16 +114,20 @@ export class UsersService {
         };
     }
 
-    async deleteAccount(userId: number): Promise<UserResponse> {
+    async deleteAccount(userId: number, hardDelete: boolean = false): Promise<UserResponse> {
         const user = await this.usersRepository.findOne({ where: { id: userId } });
 
         if (!user) {
             throw new NotFoundException('User not found');
         }
 
-        user.isActive = false;
-        user.updatedAt = new Date();
-        await this.usersRepository.save(user);
+        if (hardDelete) {
+            await this.usersRepository.remove(user);
+        } else {
+            user.isActive = false;
+            user.updatedAt = new Date();
+            await this.usersRepository.save(user);
+        }
 
         return { message: 'Account deleted successfully' };
     }
