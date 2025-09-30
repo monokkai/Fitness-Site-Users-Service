@@ -1,6 +1,6 @@
 import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn } from 'typeorm';
 
-@Entity('users')
+@Entity('Users')
 export class User {
     @PrimaryGeneratedColumn({ name: 'Id' })
     id: number;
@@ -10,9 +10,6 @@ export class User {
 
     @Column({ name: 'Email', unique: true })
     email: string;
-
-    @Column({ name: 'Password' })
-    password: string;
 
     @Column({ name: 'PasswordHash' })
     passwordHash: string;

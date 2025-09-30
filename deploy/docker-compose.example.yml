@@ -1,0 +1,10 @@
+services:
+  users-service:
+    container_name: # container name
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    networks:
+      - auth-network

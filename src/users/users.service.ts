@@ -1,6 +1,5 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Injectable, Inject, NotFoundException, ConflictException } from '@nestjs/common';
+import { DataSource, Repository } from 'typeorm';
 import { User } from '../database/entities/user.entity';
 import * as bcrypt from 'bcrypt';
 
@@ -26,10 +25,11 @@ export interface UserResponse {
 
 @Injectable()
 export class UsersService {
-    constructor(
-        @InjectRepository(User)
-        private usersRepository: Repository<User>,
-    ) { }
+    private usersRepository: Repository<User>;
+
+    constructor(@Inject('DATA_SOURCE') private dataSource: DataSource) {
+        this.usersRepository = this.dataSource.getRepository(User);
+    }
 
     async getUserById(userId: number): Promise<UserProfile> {
         const user = await this.usersRepository.findOne({
@@ -48,6 +48,18 @@ export class UsersService {
             avatarUrl: user.avatarUrl ?? undefined,
             createdAt: user.createdAt
         };
+    }
+
+    async getUserWithPassword(userId: number): Promise<User> {
+        const user = await this.usersRepository.findOne({
+            where: { id: userId }
+        });
+
+        if (!user) {
+            throw new NotFoundException('User not found');
+        }
+
+        return user;
     }
 
     async updateProfile(userId: number, updateData: UpdateProfileData): Promise<UserResponse> {
@@ -78,8 +90,8 @@ export class UsersService {
         }
 
         if (updateData.password) {
-            const saltRounds = 10;
-            user.password = await bcrypt.hash(updateData.password, saltRounds);
+            const saltRounds = 11;
+            user.passwordHash = await bcrypt.hash(updateData.password, saltRounds);
         }
 
         user.updatedAt = new Date();
@@ -97,6 +109,20 @@ export class UsersService {
         };
     }
 
+    async deleteAccount(userId: number): Promise<void> {
+        console.log('🗑️ Deleting user:', userId);
+
+        const user = await this.usersRepository.findOne({ where: { id: userId } });
+        if (!user) {
+            console.log('❌ User not found for deletion');
+            throw new NotFoundException('User not found');
+        }
+
+        console.log('✅ User found, proceeding with deletion...');
+        await this.usersRepository.remove(user);
+        console.log('✅ User successfully deleted from database');
+    }
+
     async updateAvatar(userId: number, avatarUrl: string): Promise<UserResponse> {
         const user = await this.usersRepository.findOne({ where: { id: userId } });
 
@@ -106,29 +132,19 @@ export class UsersService {
 
         user.avatarUrl = avatarUrl;
         user.updatedAt = new Date();
+
         await this.usersRepository.save(user);
 
         return {
             message: 'Avatar updated successfully',
-            avatarUrl
+            user: {
+                id: user.id,
+                username: user.username,
+                email: user.email,
+                avatarUrl: user.avatarUrl ?? undefined,
+                createdAt: user.createdAt,
+            },
         };
     }
 
-    async deleteAccount(userId: number, hardDelete: boolean = false): Promise<UserResponse> {
-        const user = await this.usersRepository.findOne({ where: { id: userId } });
-
-        if (!user) {
-            throw new NotFoundException('User not found');
-        }
-
-        if (hardDelete) {
-            await this.usersRepository.remove(user);
-        } else {
-            user.isActive = false;
-            user.updatedAt = new Date();
-            await this.usersRepository.save(user);
-        }
-
-        return { message: 'Account deleted successfully' };
-    }
 }

@@ -16,6 +16,7 @@ import { UpdateProfileDto } from './dto/update-profile.dto';
 import { UpdateAvatarDto } from './dto/update-avatar.dto';
 import { Request } from 'express';
 import { DeleteAccountDto } from './dto/delete-account.dto';
+import * as bcrypt from 'bcrypt';
 
 interface AuthenticatedRequest extends Request {
     user?: { id: number };
@@ -53,7 +54,7 @@ export class UsersController {
     }
 
     @Put('avatar')
-    async updateAvatar(
+    updateAvatar(
         @Req() req: AuthenticatedRequest,
         @Body() avatarData: UpdateAvatarDto
     ): Promise<UserResponse> {
@@ -64,18 +65,25 @@ export class UsersController {
     }
 
     @Delete('account')
-    @HttpCode(HttpStatus.NO_CONTENT)
-    async deleteAccount(@Req() req: AuthenticatedRequest, @Body() deleteData: DeleteAccountDto): Promise<void> {
+    @HttpCode(HttpStatus.OK)
+    async deleteAccount(
+        @Req() req: AuthenticatedRequest,
+        @Body() deleteData: DeleteAccountDto
+    ): Promise<{ message: string }> {
         if (!req.user?.id) {
             throw new Error('User not found in request');
         }
-        const user = await this.usersService.getUserById(req.user.id);
-        const isPasswordValid = await bcrypt.compare(deleteData.password, user.password);
 
+        const user = await this.usersService.getUserWithPassword(req.user.id);
+
+        const isPasswordValid = await bcrypt.compare(deleteData.password, user.passwordHash);
         if (!isPasswordValid) {
             throw new BadRequestException('Invalid password');
         }
 
         await this.usersService.deleteAccount(req.user.id);
+
+        return { message: 'Account deleted successfully' };
     }
+
 }
